@@ -1,5 +1,7 @@
 #include <Zumo32U4Motors.h>
 #include <Zumo32U4Encoders.h>
+#include <Zumo32U4.h>
+#include <Wire.h>
 
 #include "button.h"       //include your button class from last week
 #include "event_timer.h"  //include your shiny, new event timer class
@@ -10,11 +12,12 @@
 
 Zumo32U4Motors motors;
 Zumo32U4Encoders encoders;
+Zumo32U4LineSensors lineSensors;
 
 volatile int16_t countsLeft = 0;
 volatile int16_t countsRight = 0;
 
-DebouncedButton buttonC(17, HIGH);
+DebouncedButton buttonC(HIGH);
 EventTimer timer;
 
 volatile uint8_t readyToPID = 0;
@@ -22,15 +25,15 @@ volatile uint8_t readyToPID = 0;
 // Define the robot direction of movement
 enum ROBOT_STATE
 {
-    STOP_MOVING,
-    DRIVING_FORWARD,
-    TURN_RIGHT,
-    TURN_LEFT,
-    PERFORM_SPIN
+    ROBOT_STOP,
+    ROBOT_FORWARD,
+    ROBOT_RIGHT,
+    ROBOT_LEFT,
+    ROBOT_SPIN
 
 };
 
-ROBOT_STATE robotState = STOP_MOVING; // default to idle
+ROBOT_STATE robotState = ROBOT_STOP; // default to idle
 
 
 void setup()
@@ -51,13 +54,13 @@ void setup()
   
   interrupts(); //re-enable interrupts
 
-  buttonC.Init(); //don't forget to call Init()
+  buttonC.Init(17); //don't forget to call Init()
 }
 
 void loop() 
 {  
   //simple event-driven structure
-  if(buttonC.getState())          HandleButtonC();
+  if(buttonC.getState() == DebouncedButton::Pressed)          HandleButtonC();
   if(timer.CheckExpired())        HandleTimer();  //use this for the 1 second wait
   if(CheckDistance())             HandleDistance();
   if(readyToPID)                  HandlePID();
@@ -66,35 +69,35 @@ void loop()
 
 bool robot_move(const ROBOT_STATE move_type)
 {
-    if (ROBOT_STATE == STOP_MOVING) 
+    if (robotState == ROBOT_STOP) 
     {
         Serial.print("HALT! \n");
         motors.setSpeeds (0,0);
         
     }
 
-    else if (ROBOT_STATE == DRIVING_FORWARD) 
+    else if (robotState == ROBOT_FORWARD) 
     {
         Serial.print("ONWARD! \n");
         motors.setSpeeds (50,50);
 
     }
 
-    else if (ROBOT_STATE == TURN_RIGHT) 
+    else if (robotState == ROBOT_RIGHT) 
     {
         Serial.print("SKRTTT! \n");
         motors.setSpeeds (50,20);
 
     }
 
-    else if (ROBOT_STATE == TURN_LEFT) 
+    else if (robotState == ROBOT_LEFT) 
     {
         Serial.print("SCREECHHH! \n");
         motors.setSpeeds (20,50);
 
     }
 
-    else if (ROBOT_STATE == PERFORM_SPIN) 
+    else if (robotState == ROBOT_SPIN)
     {
         Serial.print("I'M SPINNING! \n");
         motors.setSpeeds (-50,50);
@@ -145,28 +148,30 @@ bool CheckDistance(void)
 
 void HandleButtonC(void)
 {
+  
   Serial.println("HandleButtonC()");
-  if(ROBOT_STATE = STOP_MOVING)
+//  if(buttonC.getState() == DebouncedButton::Pressed)
   {
-    State = STOP_MOVING;
+    robotState = ROBOT_STOP;
     timer.Start(1000);
+        
   }
 
-  else
-  {
-    //nothing to do here...
-    //how might you edit this so that pressing the button always starts over?
-  }
+//  else
+//  {
+//    //nothing to do here...
+//    //how might you edit this so that pressing the button always starts over?
+//  }
 }
 
 void HandleTimer(void)
 {
   Serial.println("HandleTimer()");
-  if(ROBOT_STATE = STOP_MOVING)
+  if(timer.CheckExpired() == false)
   {
     iSegment = 0;
     Drive(iSegment);
-    ROBOT_STATE = DRIVING_FORWARD;
+    robotState = ROBOT_FORWARD;
   }
 }
 
@@ -174,9 +179,9 @@ void HandleTimer(void)
 void HandleDistance(void)
 {
   Serial.println("HandleDistance()");
-  Serial.println(_ROBOT_STATE);
+  Serial.println(robotState);
 
-  if(ROBOT_STATE = DRIVING_FORWARD)
+  if(robotState == ROBOT_FORWARD)
   {
     if(++iSegment < segCount) //guard condition from the state machine
     {
@@ -188,7 +193,7 @@ void HandleDistance(void)
       motors.setSpeeds(0,0); //don't forget to stop!
       targetLeft = 0;
       targetRight = 0;
-      ROBOT_STATE = STOP_MOVING;    
+      robotState = ROBOT_STOP;    
     }
   }
 }
@@ -199,10 +204,9 @@ void Drive(int s)
   Serial.println(segments[s].distance);
 
   //start the timer, then command the motors; note that "setSpeeds()" actually just sets the duty cycle, not speed
-  timer.Start(segments[s].duration);
   targetLeft = segments[s].leftMotorSpeed;
   targetRight = segments[s].rightMotorSpeed;
-
+  timer.Start(segments[s].distance);
   noInterrupts();
   startLeft = encoders.getCountsLeft();
   interrupts();
@@ -211,18 +215,18 @@ void Drive(int s)
   
 void getDistance()
 {
-  if (distancePulse > 30)
+  if (getDistance > 30)
     {
-      ROBOT_STATE = TURN_RIGHT;
+      robotState = ROBOT_RIGHT;
     }
-  else if (distancePulse < 30);
+  else if (getDistance < 30)
     {
-      ROBOT_STATE = TURN_LEFT ;
+      robotState = ROBOT_LEFT ;
     }
   else
-  {
-    ROBOT_STATE = DRIVING_FORWARD;
-  }
+    {
+      robotState = ROBOT_FORWARD;
+    }
 }
 
 void HandlePID(void)
@@ -283,5 +287,3 @@ ISR(TIMER4_OVF_vect)
 
   readyToPID = 1;
 }
-
-
